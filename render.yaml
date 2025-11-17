@@ -1,15 +1,11 @@
 services:
   - type: web
-    name: TIMO-MD
+    name: timo-md
     env: node
-    plan: free
+    branch: main
     buildCommand: "npm install"
     startCommand: "node index.js"
-    autoDeploy: true
     envVars:
-      - key: SESSION_ID
-        value: ""
-      - key: PAIR_MODE
-        value: "true"
-      - key: KEEPALIVE_URL
-        value: "https://timo-md.onrender.com/ping"
+      - key: PORT
+        value: 3000
+    autoDeploy: true
