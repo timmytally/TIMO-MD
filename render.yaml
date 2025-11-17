@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: TIMO-MD
+    env: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node index.js"
+    autoDeploy: true
+    envVars:
+      - key: SESSION_ID
+        value: ""
+      - key: PAIR_MODE
+        value: "true"
+      - key: KEEPALIVE_URL
+        value: "https://timo-md.onrender.com/ping"
