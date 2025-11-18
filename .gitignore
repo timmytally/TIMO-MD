@@ -1,0 +1,26 @@
+# Node dependencies
+node_modules/
+package-lock.json
+
+# Baileys WhatsApp session files
+auth/
+session/
+creds.json
+auth_info.json
+baileys_auth_info/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+
+# Cache / temp
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
