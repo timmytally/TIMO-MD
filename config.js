@@ -1,122 +1,70 @@
-const fs = require('fs');
-if (fs.existsSync('config.env')) require('dotenv').config({ path: './config.env' });
+const fs = require("fs");
+if (fs.existsSync("config.env")) require("dotenv").config({ path: "./config.env" });
 
-function convertToBool(text, fault = 'true') {
-    return text === fault ? true : false;
+// Convert env string to boolean
+function toBool(text, defaultValue = true) {
+    if (text === undefined) return defaultValue;
+    return text.toLowerCase() === "true";
 }
 
-module.exports = {
-SESSION_ID: process.env.SESSION_ID || "",
-// add your Session Id 
-
-AUTO_STATUS_SEEN: process.env.AUTO_STATUS_SEEN || "true",
-// make true or false status auto seen
-
-AUTO_STATUS_REPLY: process.env.AUTO_STATUS_REPLY || "false",
-// make true if you want auto reply on status 
-
-AUTO_STATUS_REACT: process.env.AUTO_STATUS_REACT || "true",
-// make true or false for auto react on status
-
-ANTI_CALL: process.env.ANTI_CALL || "true",
-// anticall on/off
-
-AUTO_STATUS_MSG: process.env.AUTO_STATUS_MSG || "*SEEN YOUR STATUS BY TIMO # KIDINYI MD 🔥*",
-// set the auto reply massage on status reply  
-
-ANTI_DELETE: process.env.ANTI_DELETE || "true",
-// set true false for anti delete     
-
-ANTI_DEL_PATH: process.env.ANTI_DEL_PATH || "log", 
-// change it to 'same' if you want to resend deleted message in same chat     
-
-WELCOME: process.env.WELCOME || "true",
-// true if want welcome and goodbye msg in groups    
-
-ADMIN_EVENTS: process.env.ADMIN_EVENTS || "false",
-// make true to know who dismiss or promoted a member in group
-
-ANTI_LINK: process.env.ANTI_LINK || "true",
-// make anti link true,false for groups 
-
-MENTION_REPLY: process.env.MENTION_REPLY || "false",
-// make true if want auto voice reply if someone menetion you 
-
-MENU_IMAGE_URL: process.env.MENU_IMAGE_URL || "https://files.catbox.moe/52dotx.jpg",
-// add custom menu and mention reply image url
-
-PREFIX: process.env.PREFIX || ".",
-// add your prifix for bot   
-
-BOT_NAME: process.env.BOT_NAME || "TIMO-MD",
-// add bot namw here for menu
-
-STICKER_NAME: process.env.STICKER_NAME || "TIMO-MD",
-// type sticker pack name 
-
-CUSTOM_REACT: process.env.CUSTOM_REACT || "false",
-// make this true for custum emoji react    
-
-CUSTOM_REACT_EMOJIS: process.env.CUSTOM_REACT_EMOJIS || "💝,💖,💗,❤️‍🩹,❤️,🧡,💛,💚,💙,💜,🤎,🖤,🤍",
-// chose custom react emojis by yourself
-
-OWNER_NUMBER: process.env.OWNER_NUMBER || "255767862457",
-// add your bot owner number
-
-OWNER_NAME: process.env.OWNER_NAME || "TIMO-TECH",
-// add bot owner name
-
-DESCRIPTION: process.env.DESCRIPTION || "*© POWERED TIMO TECH*",
-// add bot description    
-
-ALIVE_IMG: process.env.ALIVE_IMG || "https://files.catbox.moe/52dotx.jpg",
-// add img for alive msg
-
-LIVE_MSG: process.env.LIVE_MSG || "> Powered by *TIMO TECH*⚡",
-// add alive msg here 
-
-READ_MESSAGE: process.env.READ_MESSAGE || "false",
-// Turn true or false for automatic read msgs
-
-AUTO_REACT: process.env.AUTO_REACT || "false",
-// make this true or false for auto react on all msgs
-
-ANTI_BAD: process.env.ANTI_BAD || "false",
-// false or true for anti bad words  
-
-MODE: process.env.MODE || "public",
-// make bot public-private-inbox
-
-AUTO_STICKER: process.env.AUTO_STICKER || "false",
-// make true for automatic stickers 
-
-AUTO_REPLY: process.env.AUTO_REPLY || "false",
-// make true or false automatic text reply 
-
-ALWAYS_ONLINE: process.env.ALWAYS_ONLINE || "false",
-// maks true for always online 
-
-PUBLIC_MODE: process.env.PUBLIC_MODE || "true",
-// make false if want private mod
-
-AUTO_TYPING: process.env.AUTO_TYPING || "true",
-// true for automatic show typing   
-
-READ_CMD: process.env.READ_CMD || "false",
-// true if want mark commands as read 
-
-DEV: process.env.DEV || "255767862457",
-// replace with your whatsapp number        
-
-ANTI_VV: process.env.ANTI_VV || "true",
-// true for anti once view 
-
-AUTO_RECORDING: process.env.AUTO_RECORDING || "false",
-// make it true for auto recoding 
-
-AUTO_BIO: process.env.AUTO_BIO || "false",
-// make true if you want bot to auto-update bio/status
-
-CHATBOT: process.env.CHATBOT || "false"
-// make true if you want AI chatbot responses enabled
+// ---------------- BOT SETTINGS ----------------
+const BOT_INFO = {
+    prefix: process.env.PREFIX || ".",
+    name: process.env.BOT_NAME || "TIMO-MD",
+    owner: process.env.OWNER_NAME || "TIMO-TECH",
+    ownerNumber: process.env.OWNER_NUMBER || "25445898330",
+    stickerName: process.env.STICKER_NAME || "TIMO-MD",
+    menuImage: process.env.MENU_IMAGE_URL || "https://files.catbox.moe/4j07ae.jpg",
+    description: process.env.DESCRIPTION || "*© POWERED BY TIMO MD*",
 };
+
+// ---------------- FEATURE SETTINGS ----------------
+const SETTINGS = {
+    autoSeen: toBool(process.env.AUTO_STATUS_SEEN),
+    autoReply: toBool(process.env.AUTO_REPLY),
+    autoReact: toBool(process.env.AUTO_STATUS_REACT),
+    autoStatusReply: toBool(process.env.AUTO_STATUS_REPLY),
+    autoStatusMsg: process.env.AUTO_STATUS_MSG,
+    antiDelete: toBool(process.env.ANTI_DELETE),
+    antiLink: toBool(process.env.ANTI_LINK),
+    welcome: toBool(process.env.WELCOME),
+    alwaysOnline: toBool(process.env.ALWAYS_ONLINE),
+    chatbot: toBool(process.env.CHATBOT),
+    autoSticker: toBool(process.env.AUTO_STICKER),
+    autoTyping: toBool(process.env.AUTO_TYPING),
+    autoRecording: toBool(process.env.AUTO_RECORDING),
+    readMessage: toBool(process.env.READ_MESSAGE),
+    antiCall: toBool(process.env.ANTICALL),
+    customReact: toBool(process.env.CUSTOM_REACT),
+    customReactEmojis: (process.env.CUSTOM_REACT_EMOJIS || "💝,💖,💗,❤️‍🩹,❤️,🧡,💛,💚,💙,💜,🤎,🖤,🤍").split(","),
+
+};
+
+// ---------------- COMMANDS ----------------
+// Define commands here as functions
+const commands = {
+    ping: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, { text: "🏓 Pong!" });
+    },
+    menu: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `📜 *${BOT_INFO.name} Menu*\nPrefix: ${BOT_INFO.prefix}\nCommands: ping, menu, hello`
+        });
+    },
+    hello: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, { text: "👋 Hello! How are you?" });
+    },
+};
+
+module.exports = {    BOT_INFO,
+    commands,
+    SESSION_ID: process.env.SESSION_ID || "",
+    AUTO_STATUS_SEEN: process.env.AUTO_STATUS_SEEN || "true",
+    AUTO_STATUS_REPLY: process.env.AUTO_STATUS_REPLY || "false",
+    AUTO_STATUS_REACT: process.env.AUTO_STATUS_REACT || "true",
+    ANTI_CALL: process.env.ANTI_CALL || "true",
+    ANTI_DELETE: process.env.ANTI_DELETE || "true",
+    WELCOME: process.env.WELCOME || "true",
+    ANTI_LINK: process.env.ANTI_LINK || "true",
+    MENTION_REPLY: process.env.MENTION_REPLY || "false",
+    MENU_IMAGE_URL: process.env.MENU_IMAGE_URL || "https://files.catbox.moe/52dotx.jpg",};

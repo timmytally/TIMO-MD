@@ -1,214 +1,143 @@
-// index.js - TIMO-MD (Multi-Device, modular command loader)
-// IMPORTANT: install the packages listed below before running.
+// index.js - TIMO-MD (Multi-Device, single config command loader)
+const fs = require("fs");
+const path = require("path");
+const express = require("express");
+const qrcode = require("qrcode");
+const pino = require("pino");
+const { BOT_INFO, SETTINGS, commands, SESSION_ID } = require("./config");
+const PREFIX = BOT_INFO.prefix;
 
-const makeDebug = require('debug')('timo-md');
-const pino = require('pino');
-const fs = require('fs');
-const path = require('path');
+
 
 const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason,
-  generateMessageID,
-} = require('@whiskeysockets/baileys');
+    default: makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    DisconnectReason,
+} = require("@whiskeysockets/baileys");
 
-const { default: Pino } = require('pino');
 
-// web panel (optional)
-const express = require('express');
-const qrcode = require('qrcode');
-
-const COMMANDS_DIR = path.join(__dirname, 'commands');
-const SESSION_DIR = path.join(__dirname, 'session'); // persistent auth
+const SESSION_DIR = path.join(__dirname, "session");
 const PORT = process.env.PORT || 3000;
 
 let sock = null;
 let QR_DATA_URL = null;
-let BOT_STATUS = 'starting';
+let BOT_STATUS = "starting";
 
-// load commands map from /commands folder
-const commands = new Map();
+// ---------------- SAFE MESSAGE EXTRACTOR ----------------
+function getTextMessage(msg) {
+    const m = msg.message;
+    if (!m) return null;
 
-function loadCommands() {
-  commands.clear();
-  if (!fs.existsSync(COMMANDS_DIR)) fs.mkdirSync(COMMANDS_DIR, { recursive: true });
-  const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.js'));
-  for (const file of files) {
-    try {
-      delete require.cache[require.resolve(path.join(COMMANDS_DIR, file))];
-      const mod = require(path.join(COMMANDS_DIR, file));
-      if (mod && mod.command && typeof mod.exec === 'function') {
-        commands.set(mod.command, mod);
-        console.log('[CMD] Loaded', mod.command);
-      }
-    } catch (e) {
-      console.error('[CMD] Failed to load', file, e);
-    }
-  }
+    if (m.conversation) return m.conversation;
+    if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
+    if (m.imageMessage?.caption) return m.imageMessage.caption;
+    if (m.videoMessage?.caption) return m.videoMessage.caption;
+    if (m.buttonsResponseMessage)
+        return m.buttonsResponseMessage.selectedButtonId;
+    if (m.listResponseMessage)
+        return m.listResponseMessage.singleSelectReply.selectedRowId;
+
+    return null;
 }
 
-async function startSock() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [4, 0, 0] }));
+// ---------------- HANDLE COMMAND ----------------------
 
-  sock = makeWASocket({
-    auth: state,
-    version,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: false, // we generate QR for web & console
-    browser: ['TIMO-MD', 'Chrome', '1.0.0'],
-  });
+async function handleCommand(msg, text, sock) {
+    if (!text.startsWith(PREFIX)) return;
 
-  // save creds
-  sock.ev.on('creds.update', saveCreds);
+    const args = text.slice(PREFIX.length).trim().split(/ +/);
+    const cmdName = args.shift().toLowerCase();
 
-  // connection updates
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) {
-      QR_DATA_URL = await qrcode.toDataURL(qr);
-      BOT_STATUS = 'qr';
-      console.log('[QR] New QR generated (open web panel or terminal).');
-      // also print small ascii qr:
-      require('qrcode-terminal').generate(qr, { small: true });
+    const cmd = commands[cmdName];
+    if (!cmd) {
+        return sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ Unknown command: *${cmdName}*`
+        });
     }
 
-    if (connection === 'open') {
-      BOT_STATUS = 'connected';
-      QR_DATA_URL = null;
-      console.log('TIMO-MD connected ✅');
-      loadCommands(); // reload commands on connect
-    }
-
-    if (connection === 'close') {
-      BOT_STATUS = 'disconnected';
-      const reason = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.name;
-      console.warn('[CONN] closed, reason=', reason);
-      if (reason === DisconnectReason.loggedOut) {
-        console.warn('Logged out. Remove session folder and re-scan QR.');
-        // do not auto-reconnect; require manual rescan
-      } else {
-        console.log('Attempting reconnect in 3s...');
-        setTimeout(() => startSock(), 3000);
-      }
-    }
-  });
-
-  // messages
-  sock.ev.on('messages.upsert', async (m) => {
     try {
-      const msg = m.messages[0];
-      if (!msg || msg.key?.fromMe) return;
-
-      // Auto-read feature (set to read receipts)
-      try { await sock.readMessages([msg.key]); } catch (e) { /* ignore */ }
-
-      // simple command parsing:
-      const content = msg.message;
-      let text = '';
-      if (content.conversation) text = content.conversation;
-      else if (content.extendedTextMessage) text = content.extendedTextMessage.text;
-      else if (content.imageMessage?.caption) text = content.imageMessage.caption;
-      else if (content.videoMessage?.caption) text = content.videoMessage.caption;
-
-      if (!text) return;
-
-      const prefix = process.env.CMD_PREFIX || '';
-      const cmdName = text.trim().split(/\s+/)[0].replace(prefix, '').toLowerCase();
-
-      // command hot reload: allow "!reload" from owner if needed
-      if (cmdName === 'reload' && isFromOwner(msg)) {
-        loadCommands();
-        return sock.sendMessage(msg.key.remoteJid, { text: 'Commands reloaded.' });
-      }
-
-      if (commands.has(cmdName)) {
-        const mod = commands.get(cmdName);
-        try {
-          await mod.exec({ sock, msg, text, isOwner: isFromOwner(msg) });
-        } catch (err) {
-          console.error('Command exec error', err);
-          await sock.sendMessage(msg.key.remoteJid, { text: 'Error running command.' });
-        }
-      }
+        await cmd({ msg, sock, args, text, PREFIX });
     } catch (err) {
-      console.error('messages.upsert error', err);
+        console.error("[CMD ERROR]", err);
+        await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ Command error. Check console." });
     }
-  });
+}
 
-  // group participants update (welcome/left)
-  sock.ev.on('group-participants.update', async (update) => {
-    try {
-      const jid = update.id;
-      for (const p of update.participants) {
-        if (update.action === 'add') {
-          const message = `Welcome @${p.split('@')[0]} 👋`;
-          await sock.sendMessage(jid, {
-            text: message,
-            mentions: [p]
-          });
-        } else if (update.action === 'remove') {
-          await sock.sendMessage(jid, { text: `Bye @${p.split('@')[0]} 💙`, mentions: [p] });
+// ------------------- START SOCKET ----------------------
+async function startSock() {
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const { version } = await fetchLatestBaileysVersion();
+
+    sock = makeWASocket({
+        auth: state,
+        version,
+        logger: pino({ level: "silent" }),
+        browser: ["TIMO-MD", "Chrome", "1.0.0"],
+        printQRInTerminal: false,
+    });
+
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            QR_DATA_URL = await qrcode.toDataURL(qr);
+            BOT_STATUS = "qr";
+            require("qrcode-terminal").generate(qr, { small: true });
+            console.log("[QR] Scan QR from Web Panel or Terminal!");
         }
-      }
-    } catch (e) { console.error(e); }
-  });
 
-  // anti-delete: re-send deleted messages to group (optional)
-  sock.ev.on('messages.delete', async (ev) => {
-    // ev has keys of deleted messages; we can attempt to fetch and notify
+        if (connection === "open") {
+            BOT_STATUS = "connected";
+            QR_DATA_URL = null;
+            console.log(`${BOT_INFO.name} connected ✅`);
+        }
+
+        if (connection === "close") {
+            BOT_STATUS = "disconnected";
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            console.warn("[CONN CLOSED] reason =", reason);
+
+            if (reason === DisconnectReason.loggedOut) {
+                console.log("Logged out — delete session & rescan.");
+            } else {
+                console.log("Reconnecting in 3 seconds...");
+                setTimeout(startSock, 3000);
+            }
+        }
+    });
+
+// ---------------- MESSAGE RECEIVER -----------------
+sock.ev.on("messages.upsert", async (m) => {
     try {
-      // implementation can be improved: stash messages on incoming and restore here
-      console.log('[ANTI-DELETE] message deleted, ids:', ev.keys);
-    } catch (e) { /* ignore */ }
-  });
+        const msg = m.messages[0];
+        if (!msg) return;
 
-  // calls - auto-block or send message
-  sock.ev.on('call', async (call) => {
-    try {
-      // auto reply: do not accept calls
-      const from = call[0].from;
-      await sock.sendMessage(from, { text: 'I cannot accept calls. Please message me.' });
-    } catch (e) { /* ignore */ }
-  });
+        const text = getTextMessage(msg);
+        if (!text) return;
 
-  return sock;
+        console.log("Message:", text);
+        await handleCommand(msg, text, sock); // <-- pass sock here
+    } catch (err) {
+        console.error("messages.upsert ERROR:", err);
+    }
+});
+ return sock;
 }
 
-function isFromOwner(msg) {
-  const owner = process.env.OWNER_JID; // e.g. "123456789@s.whatsapp.net"
-  if (!owner) return false;
-  return msg.key.participant === owner || msg.key.remoteJid === owner;
-}
-
-// ------------------ EXPRESS PANEL (optional) ------------------
+// ---------------------- WEB PANEL --------------------
 const app = express();
-app.use(express.static(path.join(__dirname, 'web')));
+app.use(express.static(path.join(__dirname, "web")));
 
-app.get('/status', (req, res) => {
-  res.json({ status: BOT_STATUS, qr: QR_DATA_URL });
-});
-
-app.get('/restart', async (req, res) => {
-  BOT_STATUS = 'restarting';
-  try {
-    if (sock) try { await sock.logout(); } catch (e) {}
-  } catch {}
-  await startSock();
-  res.json({ ok: true });
-});
-
-app.get('/commands', (req, res) => {
-  res.json({ commands: Array.from(commands.keys()) });
+app.get("/status", (req, res) => {
+    res.json({ status: BOT_STATUS, qr: QR_DATA_URL });
 });
 
 app.listen(PORT, () => {
-  console.log(`Web panel running on port ${PORT}`);
+    console.log("Web panel running on port", PORT);
 });
 
-// start the socket
-startSock().catch(err => {
-  console.error('START FAILED', err);
-});
+// --------------------- START BOT ---------------------
+startSock().catch((e) => console.error("START FAILED", e));
