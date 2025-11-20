@@ -1,3 +1,4 @@
+const axios = require("axios");
 const fs = require("fs");
 if (fs.existsSync("config.env")) require("dotenv").config({ path: "./config.env" });
 
@@ -154,27 +155,35 @@ const commands = {
     },
 
     // ---------------- ChatGPT AI ----------------
-    chatgpt: async ({ msg, sock, args }) => {
-        const prompt = args.join(" ");
-        if (!prompt)
-            return sock.sendMessage(msg.key.remoteJid, { text: "❌ Ask something.\nExample: .chatgpt explain AI" });
+   chatgpt: async ({ msg, sock, args }) => {
+    const prompt = args.join(" ");
+    if (!prompt)
+        return sock.sendMessage(msg.key.remoteJid, { text: "❌ Provide text to ask AI." });
 
-        try {
-            const ai = new OpenAIApi(new Configuration({
-                apiKey: process.env.OPENAI_API_KEY,
-            }));
+    try {
+        const response = await axios.post("https://api.luminai.xyz/gpt", {
+            prompt: prompt,
+            uid: msg.key.remoteJid,
+            model: "gpt-4o-mini"
+        });
 
-            const res = await ai.createChatCompletion({
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: prompt }],
+        if (!response.data || !response.data.response) {
+            return sock.sendMessage(msg.key.remoteJid, {
+                text: "⚠️ AI response empty."
             });
-
-            await sock.sendMessage(msg.key.remoteJid, { text: res.data.choices[0].message.content });
-        } catch (e) {
-            console.log(e);
-            await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ ChatGPT API error." });
         }
-    },
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: response.data.response
+        });
+
+    } catch (err) {
+        console.error("AI ERROR:", err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "⚠️ AI request failed."
+        });
+    }
+},
 
     // ---------------- MENU ----------------
     menu: async ({ msg, sock }) => {
