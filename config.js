@@ -1,6 +1,9 @@
 const fs = require("fs");
 if (fs.existsSync("config.env")) require("dotenv").config({ path: "./config.env" });
 
+// REQUIRED IMPORTS (you were missing these!)
+const { Configuration, OpenAIApi } = require("openai");
+
 // Convert env string to boolean
 function toBool(text, defaultValue = true) {
     if (text === undefined) return defaultValue;
@@ -37,34 +40,165 @@ const SETTINGS = {
     antiCall: toBool(process.env.ANTICALL),
     customReact: toBool(process.env.CUSTOM_REACT),
     customReactEmojis: (process.env.CUSTOM_REACT_EMOJIS || "💝,💖,💗,❤️‍🩹,❤️,🧡,💛,💚,💙,💜,🤎,🖤,🤍").split(","),
-
 };
 
+// Warning storage
+let warnings = {};
+
 // ---------------- COMMANDS ----------------
-// Define commands here as functions
 const commands = {
+
     ping: async ({ msg, sock }) => {
         await sock.sendMessage(msg.key.remoteJid, { text: "🏓 Pong!" });
     },
-    menu: async ({ msg, sock }) => {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `📜 *${BOT_INFO.name} Menu*\nPrefix: ${BOT_INFO.prefix}\nCommands: ping, menu, hello`
-        });
-    },
+
     hello: async ({ msg, sock }) => {
         await sock.sendMessage(msg.key.remoteJid, { text: "👋 Hello! How are you?" });
     },
+
+    info: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `ℹ️ Bot Name: ${BOT_INFO.name}\nOwner: ${BOT_INFO.owner}\nPrefix: ${BOT_INFO.prefix}`,
+        });
+    },
+
+    // FIXED STICKER COMMAND (NOW WORKING!)
+    sticker: async ({ msg, sock }) => {
+        if (!msg.message.imageMessage)
+            return sock.sendMessage(msg.key.remoteJid, { text: "📸 Send an image with caption *.sticker*" });
+
+        const buffer = await sock.downloadMediaMessage(msg);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            sticker: buffer,
+            packname: BOT_INFO.stickerName,
+            author: BOT_INFO.owner,
+        });
+    },
+
+    quote: async ({ msg, sock }) => {
+        const quotes = [
+            "✨ Be the change you wish to see in the world.",
+            "💡 Knowledge is power.",
+            "🔥 Dreams don’t work unless you do.",
+            "🌱 Every day is a new beginning.",
+        ];
+        await sock.sendMessage(msg.key.remoteJid, { text: quotes[Math.floor(Math.random() * quotes.length)] });
+    },
+
+    joke: async ({ msg, sock }) => {
+        const jokes = [
+            "Why don’t scientists trust atoms? Because they make up everything! 🤣",
+            "I told my computer I needed a break, and it said: 'No problem, I'll go to sleep.' 😆",
+            "Why did the scarecrow win an award? Because he was outstanding in his field! 😂",
+        ];
+        await sock.sendMessage(msg.key.remoteJid, { text: jokes[Math.floor(Math.random() * jokes.length)] });
+    },
+
+    time: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, { text: `🕒 Time: ${new Date().toLocaleString()}` });
+    },
+
+    date: async ({ msg, sock }) => {
+        await sock.sendMessage(msg.key.remoteJid, { text: `📅 Date: ${new Date().toDateString()}` });
+    },
+
+    // ---------------- GROUP COMMANDS ----------------
+
+    itawatu: async ({ msg, sock }) => {
+        const jid = msg.key.remoteJid;
+        if (!jid.endsWith("@g.us"))
+            return sock.sendMessage(jid, { text: "❌ Group only." });
+
+        const group = await sock.groupMetadata(jid);
+        const mentions = group.participants.map(p => p.id);
+
+        await sock.sendMessage(jid, { text: "👥 @yoh niggas", mentions });
+    },
+
+    autotyping: async ({ msg, sock }) => {
+        await sock.sendPresenceUpdate("composing", msg.key.remoteJid);
+    },
+
+    autorecording: async ({ msg, sock }) => {
+        await sock.sendPresenceUpdate("recording", msg.key.remoteJid);
+    },
+
+    kick: async ({ msg, sock, args }) => {
+        const jid = msg.key.remoteJid;
+        if (!jid.endsWith("@g.us"))
+            return sock.sendMessage(jid, { text: "❌ Group only." });
+
+        // FIXED MENTION SUPPORT
+        let user = args[0]?.replace(/[^0-9]/g, "");
+        if (!user)
+            return sock.sendMessage(jid, { text: "❌ Tag or enter number.\nExample: .kick 2547xxxxxxx" });
+
+        try {
+            await sock.groupParticipantsUpdate(jid, [`${user}@s.whatsapp.net`], "remove");
+            await sock.sendMessage(jid, { text: `✅ Removed ${user}` });
+        } catch (err) {
+            await sock.sendMessage(jid, { text: "⚠️ Bot must be admin." });
+        }
+    },
+
+    warn: async ({ msg, sock, args }) => {
+        let user = args[0]?.replace(/[^0-9]/g, "");
+        if (!user)
+            return sock.sendMessage(msg.key.remoteJid, { text: "❌ Tag or enter number." });
+
+        warnings[user] = (warnings[user] || 0) + 1;
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `⚠️ User: ${user}\nWarnings: ${warnings[user]}/3`,
+        });
+    },
+
+    // ---------------- ChatGPT AI ----------------
+    chatgpt: async ({ msg, sock, args }) => {
+        const prompt = args.join(" ");
+        if (!prompt)
+            return sock.sendMessage(msg.key.remoteJid, { text: "❌ Ask something.\nExample: .chatgpt explain AI" });
+
+        try {
+            const ai = new OpenAIApi(new Configuration({
+                apiKey: process.env.OPENAI_API_KEY,
+            }));
+
+            const res = await ai.createChatCompletion({
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: prompt }],
+            });
+
+            await sock.sendMessage(msg.key.remoteJid, { text: res.data.choices[0].message.content });
+        } catch (e) {
+            console.log(e);
+            await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ ChatGPT API error." });
+        }
+    },
+
+    // ---------------- MENU ----------------
+    menu: async ({ msg, sock }) => {
+        let menuText = `╔════════════════════
+║ 🌟 *${BOT_INFO.name} Menu* 🌟
+╠════════════════════
+║ 🔹 Prefix: ${BOT_INFO.prefix}
+║ 🔹 Owner: ${BOT_INFO.owner}
+╠════════════════════
+║ 📌 Commands:\n`;
+
+        let i = 1;
+        for (let cmd in commands) menuText += `║ ${i++}️⃣ ${cmd}\n`;
+
+        menuText += `╚════════════════════
+${BOT_INFO.description}`;
+
+        await sock.sendMessage(msg.key.remoteJid, { text: menuText });
+    },
 };
 
-module.exports = {    BOT_INFO,
+module.exports = {
+    BOT_INFO,
+    SETTINGS,
     commands,
     SESSION_ID: process.env.SESSION_ID || "",
-    AUTO_STATUS_SEEN: process.env.AUTO_STATUS_SEEN || "true",
-    AUTO_STATUS_REPLY: process.env.AUTO_STATUS_REPLY || "false",
-    AUTO_STATUS_REACT: process.env.AUTO_STATUS_REACT || "true",
-    ANTI_CALL: process.env.ANTI_CALL || "true",
-    ANTI_DELETE: process.env.ANTI_DELETE || "true",
-    WELCOME: process.env.WELCOME || "true",
-    ANTI_LINK: process.env.ANTI_LINK || "true",
-    MENTION_REPLY: process.env.MENTION_REPLY || "false",
-    MENU_IMAGE_URL: process.env.MENU_IMAGE_URL || "https://files.catbox.moe/52dotx.jpg",};
+};
