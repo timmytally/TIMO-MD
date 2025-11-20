@@ -1,4 +1,5 @@
 const axios = require("axios");
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const fs = require("fs");
 if (fs.existsSync("config.env")) require("dotenv").config({ path: "./config.env" });
 
@@ -156,32 +157,20 @@ const commands = {
 
     // ---------------- ChatGPT AI ----------------
    chatgpt: async ({ msg, sock, args }) => {
+    const axios = require("axios");
     const prompt = args.join(" ");
     if (!prompt)
         return sock.sendMessage(msg.key.remoteJid, { text: "❌ Provide text to ask AI." });
 
     try {
-        const response = await axios.post("https://api.luminai.xyz/gpt", {
-            prompt: prompt,
-            uid: msg.key.remoteJid,
-            model: "gpt-4o-mini"
-        });
+        const response = await axios.get(
+            `https://bk9.fun/gpt4o?text=${encodeURIComponent(prompt)}`
+        );
 
-        if (!response.data || !response.data.response) {
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: "⚠️ AI response empty."
-            });
-        }
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: response.data.response
-        });
+        await sock.sendMessage(msg.key.remoteJid, { text: response.data.result });
 
     } catch (err) {
-        console.error("AI ERROR:", err);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: "⚠️ AI request failed."
-        });
+        await sock.sendMessage(msg.key.remoteJid, { text: "⚠ AI request failed." });
     }
 },
 
