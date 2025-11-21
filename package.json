@@ -1,5 +1,5 @@
 {
-  "name": "TIMO-MD",
+  "name": "timo-md",
   "version": "3.0.0",
   "description": "A WhatsApp Bot Created By timo",
   "main": "index.js",
@@ -53,5 +53,17 @@
     "wa-sticker-formatter": "^4.4.4",
     "yt-search": "2.11.1",
     "ytdl-core": "^4.11.5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timmytally/TIMO-MD.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/timmytally/TIMO-MD/issues"
+  },
+  "homepage": "https://github.com/timmytally/TIMO-MD#readme"
 }
